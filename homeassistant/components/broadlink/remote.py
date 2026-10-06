@@ -341,24 +341,28 @@ class BroadlinkRemote(BroadlinkEntity, RemoteEntity, RestoreEntity):
         )
 
         try:
-            start_time = dt_util.utcnow()
-            while (dt_util.utcnow() - start_time) < LEARNING_TIMEOUT:
-                await asyncio.sleep(1)
-                try:
-                    code = await device.async_request(device.api.check_data)
-                except ReadError, StorageError:
-                    continue
-                return b64encode(code).decode("utf8")
-
-            raise TimeoutError(
-                "No infrared code received within "
-                f"{LEARNING_TIMEOUT.total_seconds()} seconds"
-            )
+            return await self._async_poll_ir_code(LEARNING_TIMEOUT)
 
         finally:
             persistent_notification.async_dismiss(
                 self.hass, notification_id="learn_command"
             )
+
+    async def _async_poll_ir_code(self, timeout):
+        """Poll the device until an infrared code is received or timeout."""
+        device = self._device
+        start_time = dt_util.utcnow()
+        while (dt_util.utcnow() - start_time) < timeout:
+            await asyncio.sleep(1)
+            try:
+                code = await device.async_request(device.api.check_data)
+            except ReadError, StorageError:
+                continue
+            return b64encode(code).decode("utf8")
+
+        raise TimeoutError(
+            f"No infrared code received within {timeout.total_seconds()} seconds"
+        )
 
     async def _async_learn_rf_command(self, command):
         """Learn a radiofrequency command."""
